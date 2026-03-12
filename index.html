@@ -6,138 +6,105 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; background: #05000a; overflow: hidden; font-family: sans-serif; }
-        #instruction {
-            position: absolute; bottom: 30px; width: 100%; text-align: center;
-            color: #d1b3ff; letter-spacing: 4px; text-transform: uppercase; font-size: 11px;
-            pointer-events: none; text-shadow: 0 0 10px #7b4eb3;
+        
+        /* The Music Box Lid Overlay */
+        #box-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a0b2e 0%, #05000a 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100; transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        #box-img { 
+            width: 300px; cursor: pointer; filter: drop-shadow(0 0 30px rgba(209, 179, 255, 0.4));
+            transition: transform 0.5s ease;
+        }
+        #box-img:hover { transform: scale(1.05); }
+        .hint { color: #d1b3ff; margin-top: 20px; letter-spacing: 3px; text-transform: uppercase; font-size: 12px; opacity: 0.6; }
+        
+        /* The UI inside the world */
+        #ui { position: absolute; bottom: 40px; width: 100%; text-align: center; color: #d1b3ff; pointer-events: none; opacity: 0; transition: opacity 2s; }
+        .active #ui { opacity: 1; }
     </style>
 </head>
 <body>
-    <div id="instruction">Click the Winding Key to Open</div>
+
+    <div id="box-overlay">
+        <img src="box_closed.jpg" id="box-img" alt="Click to open">
+        <div class="hint">Click to Open the Sanctuary</div>
+    </div>
+
+    <div id="ui"><div class="label">Drag to explore the Zodiac</div></div>
 
     <script>
+        // Updated to .jpg to match your files
         const SCENES = ['scene1.jpg', 'scene2.jpg', 'scene3.jpg', 'scene4.jpg'];
         const PANDA_FILE = 'panda_character.png';
-        const BOX_TEXTURE = 'box_closed.jpg';
         const MUSIC_FILE = 'Jade_Echoes.mp3';
 
+        // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Lighting
-        const ambient = new THREE.AmbientLight(0xffffff, 0.7);
-        scene.add(ambient);
-        const spot = new THREE.PointLight(0xd1b3ff, 1.5, 100);
-        spot.position.set(5, 10, 10);
-        scene.add(spot);
-
-        const loader = new THREE.TextureLoader();
-        const mainGroup = new THREE.Group();
-        scene.add(mainGroup);
-
-        // --- 3D BOX CONSTRUCTION ---
-        const boxTexture = loader.load(BOX_TEXTURE);
-        const boxMat = new THREE.MeshStandardMaterial({ map: boxTexture, roughness: 0.4 });
-        
-        // Lower Chest
-        const chestBase = new THREE.Mesh(new THREE.BoxGeometry(10, 5, 8), boxMat);
-        mainGroup.add(chestBase);
-
-        // The Lid with Hinge
-        const lidPivot = new THREE.Group();
-        lidPivot.position.set(0, 2.5, -4); // Back edge hinge
-        mainGroup.add(lidPivot);
-
-        const lid = new THREE.Mesh(new THREE.BoxGeometry(10, 1.5, 8), boxMat);
-        lid.position.set(0, 0.75, 4); // Offset so it sits on the base
-        lidPivot.add(lid);
-
-        // --- INTERIOR STAGE ---
-        const stage = new THREE.Group();
-        stage.position.y = 2.6;
-        stage.visible = false;
-        mainGroup.add(stage);
-
-        // Rotating Background Scenes
-        const backdrop = new THREE.Group();
-        stage.add(backdrop);
-        SCENES.forEach((file, i) => {
-            loader.load(file, (tex) => {
-                const panel = new THREE.Mesh(
-                    new THREE.CylinderGeometry(4, 4, 6, 20, 1, true, (Math.PI/2)*i, Math.PI/2),
-                    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
-                );
-                panel.scale.x = -1;
-                backdrop.add(panel);
-            });
-        });
-
-        // Figurina (Ballerina)
-        let ballerina;
-        loader.load(PANDA_FILE, (tex) => {
-            ballerina = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-            ballerina.scale.set(7, 7, 1);
-            ballerina.position.y = 2;
-            stage.add(ballerina);
-        });
-
-        // Winding Key
-        const keyGroup = new THREE.Group();
-        const keyRing = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.2, 12, 24), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 1 }));
-        keyGroup.add(keyRing);
-        keyGroup.position.set(5.5, -1, 0);
-        keyGroup.rotation.y = Math.PI / 2;
-        mainGroup.add(keyGroup);
-
-        // --- AUDIO & CAMERA ---
+        // Audio Setup
         const listener = new THREE.AudioListener();
         camera.add(listener);
         const sound = new THREE.Audio(listener);
         new THREE.AudioLoader().load(MUSIC_FILE, (buffer) => {
             sound.setBuffer(buffer);
             sound.setLoop(true);
+            sound.setVolume(0.5);
         });
 
-        camera.position.set(0, 8, 20);
-        camera.lookAt(0, 0, 0);
-
-        let isOpen = false;
-        window.addEventListener('mousedown', () => {
-            if (!isOpen) {
-                isOpen = true;
-                sound.play(); //
-                document.getElementById('instruction').style.opacity = '0';
-            }
+        // Box Opening Logic
+        document.getElementById('box-img').addEventListener('click', function() {
+            sound.play(); 
+            document.getElementById('box-overlay').style.opacity = '0';
+            document.getElementById('box-overlay').style.transform = 'scale(2)';
+            document.body.classList.add('active'); 
+            setTimeout(() => { document.getElementById('box-overlay').style.display = 'none'; }, 1200);
         });
 
+        const loader = new THREE.TextureLoader();
+        const worldGroup = new THREE.Group();
+        scene.add(worldGroup);
+
+        SCENES.forEach((file, i) => {
+            const texture = loader.load(file);
+            const geometry = new THREE.CylinderGeometry(20, 20, 45, 40, 1, true, (Math.PI / 2) * i, Math.PI / 2);
+            geometry.scale(-1, 1, 1); 
+            const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+            const panel = new THREE.Mesh(geometry, material);
+            worldGroup.add(panel);
+        });
+
+        const pTexture = loader.load(PANDA_FILE);
+        const panda = new THREE.Sprite(new THREE.SpriteMaterial({ map: pTexture }));
+        panda.scale.set(10, 10, 1);
+        panda.position.set(0, -1.5, 0);
+        scene.add(panda);
+
+        camera.position.z = 15;
+
+        // Interaction Logic
+        let isDragging = false, prevX = 0;
+        document.addEventListener('mousedown', () => isDragging = true);
+        document.addEventListener('mouseup', () => isDragging = false);
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) { worldGroup.rotation.y += (e.clientX - prevX) * 0.005; }
+            prevX = e.clientX;
+        });
+
+        // Animation Loop (Synced to 90 BPM)
         function animate() {
             requestAnimationFrame(animate);
-            const time = Date.now() * 0.002;
+            const time = Date.now() * 0.0047; 
+            
+            // Ballerina movement
+            panda.position.y = -1.5 + Math.sin(time) * 0.35;
+            const pulse = 1 + Math.sin(time) * 0.04;
+            panda.scale.set(10 * pulse, 10 * pulse, 1);
 
-            if (isOpen) {
-                // Hinge Rotation
-                if (lidPivot.rotation.x > -2) lidPivot.rotation.x -= 0.03;
-                
-                stage.visible = true;
-                backdrop.rotation.y += 0.01;
-                keyGroup.rotation.z += 0.15;
-                
-                if (ballerina) {
-                    ballerina.position.y = 2 + Math.sin(time) * 0.2; // Hover effect
-                    ballerina.rotation.y += 0.02; // Spin effect
-                }
-            } else {
-                // Subtle floating idle
-                mainGroup.rotation.y = Math.sin(time * 0.5) * 0.1;
-            }
-
-            renderer.render(scene, camera);
-        }
-        animate();
-    </script>
-</body>
-</html>
+            if (!
