@@ -2,26 +2,40 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Zodiac Sanctuary Music Box</title>
+    <title>Music Box</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; background: #05000a; overflow: hidden; font-family: sans-serif; }
         
-        /* The Music Box Lid Overlay */
         #box-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle, #1a0b2e 0%, #05000a 100%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             z-index: 100; transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        #box-img { 
-            width: 300px; cursor: pointer; filter: drop-shadow(0 0 30px rgba(209, 179, 255, 0.4));
-            transition: transform 0.5s ease;
+
+        /* Container to crop out the text at the bottom of the box image */
+        .box-container {
+            width: 300px;
+            height: 340px; 
+            overflow: hidden; /* This hides the bottom portion containing the text */
+            display: flex;
+            justify-content: center;
+            filter: drop-shadow(0 0 30px rgba(209, 179, 255, 0.4));
         }
+
+        #box-img { 
+            width: 300px; 
+            height: auto;
+            cursor: pointer;
+            transition: transform 0.5s ease;
+            object-position: top; /* Keeps the top of the box visible */
+        }
+
         #box-img:hover { transform: scale(1.05); }
+        
         .hint { color: #d1b3ff; margin-top: 20px; letter-spacing: 3px; text-transform: uppercase; font-size: 12px; opacity: 0.6; }
         
-        /* The UI inside the world */
         #ui { position: absolute; bottom: 40px; width: 100%; text-align: center; color: #d1b3ff; pointer-events: none; opacity: 0; transition: opacity 2s; }
         .active #ui { opacity: 1; }
     </style>
@@ -29,26 +43,25 @@
 <body>
 
     <div id="box-overlay">
-        <img src="box_closed.jpg" id="box-img" alt="Click to open">
-        <div class="hint">Click to Open the Sanctuary</div>
+        <div class="box-container">
+            <img src="box_closed.png" id="box-img" alt="Click to open">
+        </div>
+        <div class="hint">Click to open the music box</div>
     </div>
 
-    <div id="ui"><div class="label">Drag to explore the Zodiac</div></div>
+    <div id="ui"><div class="label">Drag to rotate</div></div>
 
     <script>
-        // Updated to .jpg to match your files
-        const SCENES = ['scene1.jpg', 'scene2.jpg', 'scene3.jpg', 'scene4.jpg'];
+        const SCENES = ['scene1.png', 'scene2.png', 'scene3.png', 'scene4.png'];
         const PANDA_FILE = 'panda_character.png';
         const MUSIC_FILE = 'Jade_Echoes.mp3';
 
-        // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Audio Setup
         const listener = new THREE.AudioListener();
         camera.add(listener);
         const sound = new THREE.Audio(listener);
@@ -58,8 +71,8 @@
             sound.setVolume(0.5);
         });
 
-        // Box Opening Logic
         document.getElementById('box-img').addEventListener('click', function() {
+            if (sound.context.state === 'suspended') { sound.context.resume(); }
             sound.play(); 
             document.getElementById('box-overlay').style.opacity = '0';
             document.getElementById('box-overlay').style.transform = 'scale(2)';
@@ -72,23 +85,24 @@
         scene.add(worldGroup);
 
         SCENES.forEach((file, i) => {
-            const texture = loader.load(file);
-            const geometry = new THREE.CylinderGeometry(20, 20, 45, 40, 1, true, (Math.PI / 2) * i, Math.PI / 2);
-            geometry.scale(-1, 1, 1); 
-            const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-            const panel = new THREE.Mesh(geometry, material);
-            worldGroup.add(panel);
+            loader.load(file, (texture) => {
+                const geometry = new THREE.CylinderGeometry(20, 20, 45, 40, 1, true, (Math.PI / 2) * i, Math.PI / 2);
+                geometry.scale(-1, 1, 1);
+                const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                const panel = new THREE.Mesh(geometry, material);
+                worldGroup.add(panel);
+            });
         });
 
-        const pTexture = loader.load(PANDA_FILE);
-        const panda = new THREE.Sprite(new THREE.SpriteMaterial({ map: pTexture }));
-        panda.scale.set(10, 10, 1);
-        panda.position.set(0, -1.5, 0);
-        scene.add(panda);
+        loader.load(PANDA_FILE, (pTexture) => {
+            const panda = new THREE.Sprite(new THREE.SpriteMaterial({ map: pTexture }));
+            panda.scale.set(10, 10, 1);
+            panda.position.set(0, -1.5, 0);
+            scene.add(panda);
+        });
 
         camera.position.z = 15;
 
-        // Interaction Logic
         let isDragging = false, prevX = 0;
         document.addEventListener('mousedown', () => isDragging = true);
         document.addEventListener('mouseup', () => isDragging = false);
@@ -97,14 +111,21 @@
             prevX = e.clientX;
         });
 
-        // Animation Loop (Synced to 90 BPM)
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.0047; 
-            
-            // Ballerina movement
-            panda.position.y = -1.5 + Math.sin(time) * 0.35;
-            const pulse = 1 + Math.sin(time) * 0.04;
-            panda.scale.set(10 * pulse, 10 * pulse, 1);
-
-            if (!
+            const panda = scene.children.find(child => child.type === "Sprite");
+            if (panda) {
+                panda.position.y = -1.5 + Math.sin(time) * 0.35;
+                const pulse = 1 + Math.sin(time) * 0.04;
+                panda.scale.set(10 * pulse, 10 * pulse, 1);
+            }
+            if (!isDragging && document.body.classList.contains('active')) {
+                worldGroup.rotation.y += 0.001; 
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
