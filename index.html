@@ -2,80 +2,91 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Zodiac Sanctuary 3D</title>
+    <title>3D Zodiac Sanctuary</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; background: #05000a; overflow: hidden; font-family: sans-serif; }
+        body { margin: 0; background: #05000a; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
         #instruction {
             position: absolute; bottom: 30px; width: 100%; text-align: center;
-            color: #d1b3ff; letter-spacing: 4px; text-transform: uppercase; font-size: 11px;
+            color: #d1b3ff; letter-spacing: 5px; text-transform: uppercase; font-size: 11px;
             pointer-events: none; text-shadow: 0 0 10px #7b4eb3;
         }
     </style>
 </head>
 <body>
-    <div id="instruction">Click the Winding Key to Open</div>
+    <div id="instruction">Click to Wind the Key & Open</div>
 
     <script>
+        // Assets from your project
         const SCENES = ['scene1.png', 'scene2.png', 'scene3.png', 'scene4.png'];
         const PANDA_FILE = 'panda_character.png';
-        const BOX_TEXTURE = 'box_closed.png';
         const MUSIC_FILE = 'Jade_Echoes.mp3';
 
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // --- LIGHTING ---
-        const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+        // --- ENHANCED LIGHTING ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambient);
-        const spot = new THREE.PointLight(0xd1b3ff, 2, 100);
-        spot.position.set(5, 10, 10);
-        scene.add(spot);
+        const rimLight = new THREE.PointLight(0xd1b3ff, 2, 50);
+        rimLight.position.set(-10, 10, 10);
+        scene.add(rimLight);
 
         const loader = new THREE.TextureLoader();
-        const mainGroup = new THREE.Group();
-        scene.add(mainGroup);
+        const boxGroup = new THREE.Group();
+        scene.add(boxGroup);
 
-        // --- THE 3D CHEST (USING YOUR IMAGE) ---
-        const boxTexture = loader.load(BOX_TEXTURE);
-        const boxMat = new THREE.MeshStandardMaterial({ map: boxTexture, roughness: 0.3, metalness: 0.2 });
-        
-        // Base of the Chest
-        const baseGeom = new THREE.BoxGeometry(10, 5, 7);
-        const chestBase = new THREE.Mesh(baseGeom, boxMat);
-        mainGroup.add(chestBase);
+        // --- MATERIALS ---
+        const bambooMat = new THREE.MeshStandardMaterial({ color: 0x1a0f0a, roughness: 0.4 });
+        const irisMat = new THREE.MeshPhysicalMaterial({ 
+            color: 0x4a2c73, metalness: 0.4, roughness: 0.1, 
+            transmission: 0.2, thickness: 0.5, iridescence: 1.0 
+        });
 
-        // Hinged Lid
-        const lidGroup = new THREE.Group();
-        lidGroup.position.set(0, 2.5, -3.5); // Hinge at back top
-        mainGroup.add(lidGroup);
+        // 1. THE BASE CHEST
+        const baseBox = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 8), irisMat);
+        boxGroup.add(baseBox);
 
-        const lidGeom = new THREE.BoxGeometry(10, 1.5, 7);
-        const chestLid = new THREE.Mesh(lidGeom, boxMat);
-        chestLid.position.set(0, 0.75, 3.5);
-        lidGroup.add(chestLid);
+        // Bamboo Ribbing (Cylinders at corners)
+        const ribGeom = new THREE.CylinderGeometry(0.4, 0.4, 6, 12);
+        const corners = [[5,0,4], [-5,0,4], [5,0,-4], [-5,0,-4]];
+        corners.forEach(pos => {
+            const rib = new THREE.Mesh(ribGeom, bambooMat);
+            rib.position.set(...pos);
+            boxGroup.add(rib);
+        });
 
-        // --- THE INTERIOR STAGE ---
+        // 2. THE HINGED LID
+        const lidPivot = new THREE.Group();
+        lidPivot.position.set(0, 3, -4); // Back-top hinge point
+        boxGroup.add(lidPivot);
+
+        const lidGeom = new THREE.CylinderGeometry(4, 4, 10, 32, 1, false, 0, Math.PI);
+        lidGeom.rotateZ(Math.PI / 2);
+        const lid = new THREE.Mesh(lidGeom, irisMat);
+        lid.position.set(0, 0, 4);
+        lidPivot.add(lid);
+
+        // 3. THE INTERIOR STAGE
         const stageGroup = new THREE.Group();
-        stageGroup.position.y = 1.5;
-        stageGroup.scale.set(0.1, 0.1, 0.1); // Hide initially
-        mainGroup.add(stageGroup);
+        stageGroup.position.y = 1;
+        boxGroup.add(stageGroup);
 
-        // Rotating Scenes (Small Background Screen)
-        const sceneScreen = new THREE.Group();
-        stageGroup.add(sceneScreen);
+        // Rotating Cylindrical Backdrop (Confined to box)
+        const sceneBackdrop = new THREE.Group();
+        stageGroup.add(sceneBackdrop);
         SCENES.forEach((file, i) => {
             loader.load(file, (tex) => {
                 const panel = new THREE.Mesh(
-                    new THREE.CylinderGeometry(8, 8, 12, 20, 1, true, (Math.PI/2)*i, Math.PI/2),
-                    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+                    new THREE.CylinderGeometry(3.5, 3.5, 5, 20, 1, true, (Math.PI/2)*i, Math.PI/2),
+                    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
                 );
                 panel.scale.x = -1;
-                sceneScreen.add(panel);
+                sceneBackdrop.add(panel);
             });
         });
 
@@ -83,20 +94,20 @@
         let panda;
         loader.load(PANDA_FILE, (tex) => {
             panda = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-            panda.scale.set(10, 10, 1);
-            panda.position.y = 2;
+            panda.scale.set(6, 6, 1);
+            panda.position.y = 1.5;
             stageGroup.add(panda);
         });
 
-        // Golden Winding Key
+        // Golden Key
         const keyGroup = new THREE.Group();
-        const keyRing = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.2, 12, 24), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 1 }));
+        const keyRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.2, 12, 24), new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 1 }));
         keyGroup.add(keyRing);
-        keyGroup.position.set(5.5, -1, 0);
+        keyGroup.position.set(6.5, -1, 0);
         keyGroup.rotation.y = Math.PI / 2;
-        mainGroup.add(keyGroup);
+        boxGroup.add(keyGroup);
 
-        // --- AUDIO & INTERACTION ---
+        // --- AUDIO ---
         const listener = new THREE.AudioListener();
         camera.add(listener);
         const sound = new THREE.Audio(listener);
@@ -105,14 +116,14 @@
             sound.setLoop(true);
         });
 
-        camera.position.set(0, 6, 18);
+        camera.position.set(0, 8, 20);
         camera.lookAt(0, 0, 0);
 
         let isOpen = false;
         window.addEventListener('mousedown', () => {
             if (!isOpen) {
                 isOpen = true;
-                sound.play();
+                sound.play(); //
                 document.getElementById('instruction').style.opacity = '0';
             }
         });
@@ -122,23 +133,17 @@
             const time = Date.now() * 0.002;
 
             if (isOpen) {
-                // Smoothly open lid
-                if (lidGroup.rotation.x > -Math.PI * 0.6) lidGroup.rotation.x -= 0.05;
+                // Hinge opens
+                if (lidPivot.rotation.x > -Math.PI * 0.65) lidPivot.rotation.x -= 0.04;
                 
-                // Show Interior
-                if (stageGroup.scale.x < 1) stageGroup.scale.addScalar(0.05);
-                
-                sceneScreen.rotation.y += 0.01;
-                keyGroup.rotation.z += 0.15; // Fast wind
-                
+                // Character/Scene animations
+                sceneBackdrop.rotation.y += 0.01;
+                keyGroup.rotation.z += 0.15;
                 if (panda) {
-                    panda.rotation.y += 0.02; // Ballerina Spin
-                    panda.position.y = 2 + Math.sin(time) * 0.2; // Gentle hover
+                    panda.position.y = 1.5 + Math.sin(time) * 0.25;
                 }
             } else {
-                // Idle floating
-                mainGroup.position.y = Math.sin(time * 0.5) * 0.5;
-                mainGroup.rotation.y = Math.sin(time * 0.3) * 0.1;
+                boxGroup.rotation.y = Math.sin(time * 0.5) * 0.1;
             }
 
             renderer.render(scene, camera);
